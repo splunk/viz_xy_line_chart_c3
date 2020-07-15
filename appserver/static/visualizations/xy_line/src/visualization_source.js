@@ -47,69 +47,90 @@ define([
                 if (data.rows.length < 1) {
                     return;
                 }
-                // console.log("data", data)
-                // console.log("config", config)
-                // console.log(this.getPropertyNamespaceInfo().propertyNamespace)
-                // console.log(config["display.visualizations.custom.viz_xy_line_chart_c3.xy_line.x_benchmark_value"])
+
                 var x_benchmark_value = parseFloat(config[this.getPropertyNamespaceInfo().propertyNamespace + 'x_benchmark_value'])
                 var y_benchmark_value = parseFloat(config[this.getPropertyNamespaceInfo().propertyNamespace + 'y_benchmark_value'])
                 var x_benchmark_label = config[this.getPropertyNamespaceInfo().propertyNamespace + 'x_benchmark_label']
                 var y_benchmark_label = config[this.getPropertyNamespaceInfo().propertyNamespace + 'y_benchmark_label']
-                var tooltip_table_h1 = config[this.getPropertyNamespaceInfo().propertyNamespace + 'tooltip_table_h1']
-                var tooltip_table_h2 = config[this.getPropertyNamespaceInfo().propertyNamespace + 'tooltip_table_h2']
-                var tooltip_table_h3 = config[this.getPropertyNamespaceInfo().propertyNamespace + 'tooltip_table_h3']
 
-                // console.log("x_benchmark_value", x_benchmark_value)
-                // console.log("y_benchmark_value", y_benchmark_value)
+                //create a list to store fields names --> use to name header of the tooltip table 
+                var fields_names = [];
 
-                console.log("data", data)
-                //create a array to store info for c3.data.columns
-                var d = []
+                //create a hashmap to store info: {key: dataname, val: list(element).sort(by x)} 
+                var dict = new Map();
+
                 //create a xs_map object to store info for c3.data.xs
-                var xs_map = {};
-                //create a hashmap to store x, y info (label, and vaules) for all datasets
-                var util_dict = new Map();
+                var new_xs_map = new Map();
+
+                //create a array to store info for c3.data.columns
+                var new_d = [];
+
+                if (data["fields"].length > 0) {
+                    for (i in data.fields) {
+                        field = data.fields[i];
+                        if (field["name"]) {
+                            fields_names.push(field["name"]);
+                        }
+                    }
+                }
 
                 for (i in data.rows) {
                     row = data.rows[i];
                     if (row["0"] != undefined) {
                         let key = row["0"];
-                        if (!util_dict.has(key)) {
-                            //create a object to store x, y info (label, and vaules) for each dataset
-                            var el = {}
-                            el["x_key"] = key + "_x"
-                            el["y_key"] = key
-                            el["x_values"] = [key + "_x"]
-                            el["y_values"] = [key]
-                            util_dict.set(key, el)
-                            // console.log("util_dict", util_dict)
+                        //if no key in dict, create a key:list[element]
+                        if (!dict.has(key)) {
+                            dict.set(key, []);
                         }
-                        util_dict.get(key)["x_values"].push(row["1"].replace(/,/g, ""))
-                        util_dict.get(key)["y_values"].push(row["2"].replace(/,/g, ""))
+                        let element = {};
+                        element["x_key"] = key + "_x";
+                        element["y_key"] = key;
+
+                        //update the values into element
+                        //start from 1, fields_names[0] is data's name
+                        for (let j = 1; j < fields_names.length; j++) {
+                            let att_name = fields_names[j];
+                            // element[att_name] = row[j].replace(/,/g, "");
+                            element[att_name] = row[j];
+                        }
+                        //push the element into list
+                        dict.get(key).push(element);
                     }
                 }
-                console.log("final util_dict", util_dict)
+                // console.log("dict", dict);
 
-                //push the requied info fron util_dict intot d and xs_map
-                for (let key of util_dict.keys()) {
-                    console.log("key", key)
-                    let el = util_dict.get(key)
-                    console.log("el", el)
-                    xs_map[el["y_key"]] = el["x_key"]
-                    d.push(el["x_values"])
-                    d.push(el["y_values"])
+                for (let [key, value] of dict) {
+                    var x_field = fields_names[1];
+                    var y_field = fields_names[2];
+
+                    //sort each list by x_field
+                    value.sort((a, b) => a[x_field] - b[x_field]);
+
+                    let x_key = value[0]["x_key"]
+                    let y_key = value[0]["y_key"]
+
+                    //construct xm_map
+                    new_xs_map[y_key] = x_key
+
+                    //construct columns
+                    let col_x = [x_key]
+                    let col_y = [y_key]
+                    for (let i = 0; i < value.length; i++) {
+                        let el = value[i];
+                        col_x.push(el[x_field].replace(/,/g, ""));
+                        col_y.push(el[y_field].replace(/,/g, ""));
+                    }
+                    new_d.push(col_x);
+                    new_d.push(col_y);
                 }
-
-                console.log("xs_map", xs_map);
-                console.log("d", d);
 
                 // Clear the div
                 this.$el.empty();
                 var path = this.$el;
                 var chart = c3.generate({
                     data: {
-                        xs: xs_map,
-                        columns: d,
+                        xs: new_xs_map,
+                        columns: new_d,
                         type: 'line'
                     },
                     grid: {
@@ -131,10 +152,8 @@ define([
                         }
                     },
                     tooltip: {
-                        // show: false
-                        // contents: tooltip
                         contents: function (d, defaultTitleFormat, defaultValueFormat, color) {
-                            console.log("Tooltip Start")
+
                             var $$ = this,
                                 config = $$.config,
                                 titleFormat = config.tooltip_format_title || defaultTitleFormat,
@@ -147,7 +166,6 @@ define([
                                 value,
                                 name,
                                 bgcolor;
-                            console.log("config", config)
 
                             var sanitise = function sanitise(str) {
                                 return typeof str === 'string' ? str.replace(/</g, '&lt;').replace(/>/g, '&gt;') :
@@ -167,7 +185,6 @@ define([
                             if (tooltipSortFunction) {
                                 d.sort(tooltipSortFunction);
                             }
-                            console.log("data", d)
                             for (i = 0; i < d.length; i++) {
                                 if (!(d[i] && (d[i].value || d[i].value === 0))) {
                                     continue;
@@ -184,26 +201,23 @@ define([
                                 } else {
                                     // Regular tooltip 
                                     if (!text) {
-                                        // title=sanitise(titleFormat ? titleFormat(d[i].x, d[i].index): d[i].x);
-                                        // h1 = sanitise("Series");
-                                        // h2 = sanitise("x field");
-                                        // h3 = sanitise("y field");
-                                        h1 = sanitise(tooltip_table_h1);
-                                        h2 = sanitise(tooltip_table_h2);
-                                        h3 = sanitise(tooltip_table_h3);
-                                        console.log("h1 ", h1);
-                                        console.log(titleFormat(d[i].x, d[i].index));
-                                        text = "<table class = '" + $$.CLASS.tooltip + "'><tr>" + (h1 || h1 === 0 ?
-                                            "<th colspan='2'>" + h1 + '</th>' : '');
-                                        text += (h2 || h2 === 0 ? "<th colspan='2'>" + h2 + '</th>' : '');
-                                        text += (h3 || h3 === 0 ? "<th colspan='2'>" + h3 + '</th>' : '');
+                                        //construct header of tooltip table
+                                        text = "<table class = '" + $$.CLASS.tooltip + "'><tr>"
+                                        for (let idx = 0; idx < fields_names.length; idx++) {
+                                            let header = sanitise(fields_names[idx]);
+                                            text += (header || header === 0 ? "<th colspan='2'>" + header + '</th>' : '');
+                                        }
                                         text += "</tr>";
-                                        console.log("text", text);
+
                                     }
+                                    // console.log("d", d)
                                     value = sanitise(valueFormat(d[i].value, d[i].ratio, d[i].id, d[i].index, d));
                                     x = sanitise(valueFormat(d[i].x, d[i].ratio, d[i].id, d[i].index, d));
-                                    console.log("value", value);
-                                    console.log("x", x);
+
+                                    //leverage id and index to extrac additional fields from dict 
+                                    id = sanitise(nameFormat(d[i].id, d[i].ratio, d[i].x, d[i].index, d));
+                                    index = sanitise(valueFormat(d[i].index, d[i].ratio, d[i].id, d[i].x, d));
+
                                     if (value !== undefined && x !==
                                         undefined) {
                                         // Skip elements when their name is set to null
@@ -214,7 +228,6 @@ define([
                                         bgcolor = $$.levelColor ? $$.levelColor(d[i].value) : color(d[i].id);
                                     }
                                 }
-                                console.log("$$.CLASS.tooltipName", $$.CLASS.tooltipName);
                                 if (value !== undefined) {
                                     text += "<tr class='" + $$.CLASS.tooltipName + '-' +
                                         $$.getTargetSelectorSuffix(d[i].id) + "'>";
@@ -222,12 +235,20 @@ define([
                                         bgcolor + "'></span>" + name + '</td>';
                                     text += "<td class='value' colspan='2'>" + x + '</td>';
                                     text += "<td class='value' colspan='2'>" + value + '</td>';
+
+                                    //add additional fields
+                                    el_list = dict.get(id);
+
+                                    //additional fileds name start from index 3
+                                    for (let j = 3; j < fields_names.length; j++) {
+                                        field_name = fields_names[j]
+                                        field_value = el_list[index][field_name]
+                                        // console.log("field_name", field_name, "field_value", field_value)
+                                        text += "<td class='value' colspan='2'>" + field_value + '</td>';
+                                    }
                                     text += '</tr>';
                                 }
-                                console.log("text2", text)
-                                console.log("x_benchmark_value", x_benchmark_value)
                             }
-                            console.log("final text", text)
                             return text + '</table>';
                         }
                     }
