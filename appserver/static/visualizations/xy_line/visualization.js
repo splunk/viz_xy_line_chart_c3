@@ -196,6 +196,20 @@ define(["api/SplunkVisualizationBase","api/SplunkVisualizationUtils"], function(
 	                            }]
 	                        }
 	                    },
+	                    axis: {
+	                        x: {
+	                            label: {
+	                                text: x_field,
+	                                position: 'outer-center'
+	                            }
+	                        },
+	                        y: {
+	                            label: {
+	                                text: y_field,
+	                                position: 'outer-middle'
+	                            }
+	                        }
+	                    },
 	                    tooltip: {
 	                        contents: function (d, defaultTitleFormat, defaultValueFormat, color) {
 
